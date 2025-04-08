@@ -6,7 +6,13 @@ The Crediflex Actively Validated Service (AVS) contract is an extension designed
 
 ## Deployed Contracts
 
+<!-- Arbitrum Sepolia
 - **AVS Contract**: [0xc4327AD867E6e9a938e03815Ccdd4198ccE1023c](https://sepolia.arbiscan.io/address/0xc4327AD867E6e9a938e03815Ccdd4198ccE1023c)
+- **Main Contract**: [0x0EC0b333d125278BF90f4Aa7442B61B63363F956](https://sepolia.arbiscan.io/address/0x0EC0b333d125278BF90f4Aa7442B61B63363F956) -->
+
+<!-- EDU Chain Tesnet -->
+
+- **AVS Contract**: [0xB9A051F8fba685b18415150090afC61Fe4500fAB](https://edu-chain-testnet.blockscout.com/address/0xB9A051F8fba685b18415150090afC61Fe4500fAB)
 - **Main Contract**: [0x0EC0b333d125278BF90f4Aa7442B61B63363F956](https://sepolia.arbiscan.io/address/0x0EC0b333d125278BF90f4Aa7442B61B63363F956)
 
 ### Key Features

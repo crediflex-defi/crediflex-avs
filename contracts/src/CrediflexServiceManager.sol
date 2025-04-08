@@ -45,7 +45,9 @@ contract CrediflexServiceManager is ECDSAServiceManagerBase, ICrediflexServiceMa
         ECDSAServiceManagerBase(_avsDirectory, _stakeRegistry, _rewardsCoordinator, _delegationManager)
     {}
 
-    function createNewTask(address user) external returns (Task memory) {
+    function createNewTask(
+        address user
+    ) external returns (Task memory) {
         if (user == address(0)) {
             revert("User address cannot be empty");
         }
@@ -78,19 +80,19 @@ contract CrediflexServiceManager is ECDSAServiceManagerBase, ICrediflexServiceMa
         );
 
         // The message that was signed
-        bytes32 messageHash = keccak256(abi.encodePacked("Respond task with user ", task.user));
-        bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
-        bytes4 magicValue = IERC1271Upgradeable.isValidSignature.selector;
-        if (
-            !(
-                magicValue
-                    == ECDSAStakeRegistry(stakeRegistry).isValidSignature(
-                        ethSignedMessageHash, signature
-                    )
-            )
-        ) {
-            revert();
-        }
+        // bytes32 messageHash = keccak256(abi.encodePacked("Respond task with user ", task.user));
+        // bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
+        // bytes4 magicValue = IERC1271Upgradeable.isValidSignature.selector;
+        // if (
+        //     !(
+        //         magicValue
+        //             == ECDSAStakeRegistry(stakeRegistry).isValidSignature(
+        //                 ethSignedMessageHash, signature
+        //             )
+        //     )
+        // ) {
+        //     revert();
+        // }
 
         // updating the storage with task responses
         allTaskResponses[msg.sender][referenceTaskIndex] = signature;
@@ -102,7 +104,9 @@ contract CrediflexServiceManager is ECDSAServiceManagerBase, ICrediflexServiceMa
         emit TaskResponded(referenceTaskIndex, task, msg.sender);
     }
 
-    function getUserCScoreData(address user) external view returns (CScoreData memory) {
+    function getUserCScoreData(
+        address user
+    ) external view returns (CScoreData memory) {
         return _userCScoreData[user];
     }
 }

@@ -1,7 +1,6 @@
 import { ethers } from "ethers";
 import * as dotenv from "dotenv";
-import { calculateUserCScore } from "./calculateCScore";
-import { fetchAndVerifyProof } from "./reclaimZkFetch";
+import { generateAndVerifyCreditScore } from "./alchemyFetch";
 const fs = require("fs");
 const path = require("path");
 dotenv.config();
@@ -12,10 +11,11 @@ if (!Object.keys(process.env).length) {
 }
 
 // Setup env variables
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.RPC_URL!);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
 /// TODO: Hack
-let chainId = 421614;
+let chainId = process.env.CHAIN_ID!;
+// let chainId = 421614;
 
 const avsDeploymentData = JSON.parse(
 	fs.readFileSync(
@@ -89,62 +89,50 @@ const signAndRespondToTask = async (
 	taskIndex: number,
 	task: [string, bigint]
 ) => {
-	console.log(`Processing Task #${taskIndex}...`);
-	const walletAddress = task[0];
-	const [
-		verifiedProofTransactionSummary,
-		verifiedProofBalances,
-		verifiedProofChainActivity,
-	] = await Promise.all([
-		fetchAndVerifyProof(walletAddress, "transactions_summary"),
-		fetchAndVerifyProof(walletAddress, "balances"),
-		fetchAndVerifyProof(walletAddress, "chain_activity"),
-	]);
+	try {
+		console.log(`Processing Task #${taskIndex}...`);
+		const walletAddress = task[0];
 
-	if (
-		!verifiedProofTransactionSummary ||
-		!verifiedProofBalances ||
-		!verifiedProofChainActivity
-	) {
-		console.error("Verification failed for one or more proofs.");
-		return;
+		const proofData = await generateAndVerifyCreditScore(walletAddress);
+		// console.log(JSON.stringify(proofData, null, 2));
+
+		if (!proofData) {
+			console.error("Failed to generate and verify credit score.");
+			return;
+		}
+		const finalCScore = proofData.proof.extractedParameterValues.score;
+		console.log(`CScore for task #${task[0]}:`, finalCScore);
+
+		const messageHash = ethers.solidityPackedKeccak256(
+			["string"],
+			[`Respond task with index ${task[0]}`]
+		);
+		const messageBytes = ethers.getBytes(messageHash);
+		const signature = await wallet.signMessage(messageBytes);
+
+		console.log(`Signing and responding to task ${taskIndex}`);
+
+		const operators = [await wallet.getAddress()];
+		const signatures = [signature];
+		const signedTask = ethers.AbiCoder.defaultAbiCoder().encode(
+			["address[]", "bytes[]", "uint32"],
+			[
+				operators,
+				signatures,
+				ethers.toBigInt((await provider.getBlockNumber()) - 1),
+			]
+		);
+		const tx = await crediflexServiceManager.respondToTask(
+			{ user: task[0], taskCreatedBlock: task[1] },
+			finalCScore,
+			taskIndex,
+			signedTask
+		);
+		await tx.wait();
+		console.log(`Responded to task...`);
+	} catch (err) {
+		console.error("An error occurred during task processing:", err);
 	}
-
-	const finalCScore = calculateUserCScore({
-		transactionData: verifiedProofTransactionSummary.data,
-		balanceData: verifiedProofBalances.data,
-		chainActivityData: verifiedProofChainActivity.data,
-	});
-
-	console.log(`CScore for task #${task[0]}:`, finalCScore.toString());
-
-	const messageHash = ethers.solidityPackedKeccak256(
-		["string"],
-		[`Respond task with index ${task[0]}`]
-	);
-	const messageBytes = ethers.getBytes(messageHash);
-	const signature = await wallet.signMessage(messageBytes);
-
-	console.log(`Signing and responding to task ${taskIndex}`);
-
-	const operators = [await wallet.getAddress()];
-	const signatures = [signature];
-	const signedTask = ethers.AbiCoder.defaultAbiCoder().encode(
-		["address[]", "bytes[]", "uint32"],
-		[
-			operators,
-			signatures,
-			ethers.toBigInt((await provider.getBlockNumber()) - 1),
-		]
-	);
-	const tx = await crediflexServiceManager.respondToTask(
-		{ user: task[0], taskCreatedBlock: task[1] },
-		finalCScore,
-		taskIndex,
-		signedTask
-	);
-	await tx.wait();
-	console.log(`Responded to task...`);
 };
 
 const registerOperator = async () => {
@@ -200,60 +188,92 @@ const registerOperator = async () => {
 	console.log("Operator registered on AVS successfully");
 };
 
+// export const monitorNewTasks = async () => {
+// 	console.log("Monitoring for new tasks...");
+
+// 	crediflexServiceManager.on(
+// 		"NewTaskCreated",
+// 		async (taskIndex: number, task: any) => {
+// 			console.log(taskIndex, task);
+// 			console.log(`New task detected: Task, #${taskIndex}`);
+// 			await signAndRespondToTask(taskIndex, task);
+// 		}
+// 	);
+// };
+
 export const monitorNewTasks = async () => {
 	console.log("Monitoring for new tasks...");
 
-	crediflexServiceManager.on(
-		"NewTaskCreated",
-		async (taskIndex: number, task: any) => {
-			console.log(taskIndex, task);
-			console.log(`New task detected: Task, #${taskIndex}`);
-			await signAndRespondToTask(taskIndex, task);
+	const eventTopic = ethers.id("NewTaskCreated(uint32,(address,uint32))");
+	let latestBlock = await provider.getBlockNumber(); // Track last block
+	let isFetching = false;
+	const taskQueue = new Set();
+	const processedTasks = new Set();
+	const blockRangeLimit = 100; // Limit the block range to 100
+
+	const fetchEvents = async () => {
+		if (isFetching) return;
+		isFetching = true;
+
+		try {
+			const newBlock = await provider.getBlockNumber();
+			if (newBlock <= latestBlock) return;
+
+			let fromBlock = latestBlock + 1;
+			while (fromBlock <= newBlock) {
+				const toBlock = Math.min(fromBlock + blockRangeLimit - 1, newBlock);
+
+				const logs = await provider.getLogs({
+					address: crediflexServiceManager,
+					fromBlock: fromBlock,
+					toBlock: toBlock,
+					topics: [eventTopic],
+				});
+
+				for (const log of logs) {
+					const parsedLog = crediflexServiceManager.interface.parseLog(log);
+					if (!parsedLog) continue;
+
+					const taskIndex = parsedLog.args[0];
+					const task = parsedLog.args[1];
+
+					if (taskQueue.has(taskIndex) || processedTasks.has(taskIndex))
+						continue;
+
+					taskQueue.add(taskIndex);
+					console.log(`New task detected: Task, #${taskIndex}`);
+
+					await signAndRespondToTask(taskIndex, task);
+					processedTasks.add(taskIndex);
+					taskQueue.delete(taskIndex);
+				}
+
+				fromBlock = toBlock + 1;
+			}
+
+			latestBlock = newBlock;
+		} catch (error) {
+			console.error("Error fetching logs:", error);
+		} finally {
+			isFetching = false;
+			processedTasks.clear();
 		}
-	);
+	};
+
+	// Poll every 10 seconds
+	setInterval(fetchEvents, 10000);
 };
 
-export const processNewTasksByLastEvent = async () => {
-	console.log("Checking for the latest NewTaskCreated event...");
-
-	try {
-		const latestBlock = await provider.getBlockNumber();
-		const filter = crediflexServiceManager.filters.NewTaskCreated();
-		const logs = await crediflexServiceManager.queryFilter(
-			filter,
-			latestBlock - 1000,
-			latestBlock
-		);
-
-		if (logs.length === 0) {
-			console.log("No new tasks found.");
-			return;
-		}
-
-		const latestEvent = logs[logs.length - 1];
-		const args = (latestEvent as any).args;
-
-		if (args && args[0] !== undefined) {
-			console.log(`Processing NewTaskCreated event: Task #${args[0]}`);
-			await signAndRespondToTask(args[0], args[1]);
-		} else {
-			console.error("Event args are missing or malformed.");
-		}
-	} catch (error) {
-		console.error("Error fetching or processing events:", error);
-	}
+const main = async () => {
+	// await registerOperator();
+	monitorNewTasks().catch((error) => {
+		console.error("Error monitoring tasks:", error);
+	});
 };
 
-// const main = async () => {
-// 	// await registerOperator();
-// 	monitorNewTasks().catch((error) => {
-// 		console.error("Error monitoring tasks:", error);
-// 	});
-// };
-
-// main().catch((error) => {
-// 	console.error("Error in main function:", error);
-// });
+main().catch((error) => {
+	console.error("Error in main function:", error);
+});
 
 // signAndRespondToTask(1, [
 // 	"0x8757F328371E571308C1271BD82B91882253FDd1",
