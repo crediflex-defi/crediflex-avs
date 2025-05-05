@@ -128,7 +128,7 @@ const signAndRespondToTask = async (
 			taskIndex,
 			signedTask,
 			{
-				gasLimit: ethers.parseUnits("300000", "wei"), // Example gas limit
+				gasLimit: ethers.parseUnits("1500000", "wei"), // Example gas limit
 			}
 		);
 		await tx.wait();
