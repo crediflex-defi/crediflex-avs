@@ -47,8 +47,9 @@ endif
 
 # Helper function to run forge script
 define forge_script
-	forge script $(1) --rpc-url $(NETWORK_URL) --broadcast --private-key $(PRIVATE_KEY) $(2) --skip-simulation --legacy
+	forge script $(1) --rpc-url $(NETWORK_URL) --broadcast --private-key $(PRIVATE_KEY) $(2) --legacy
 endef
+# --skip-simulation 
 
 # Define a target to deploy core contracts using the specified network
 deploy-core: build

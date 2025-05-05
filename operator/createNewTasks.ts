@@ -52,10 +52,12 @@ function generateRandomData(): string {
 
 async function createNewTask(user: string) {
 	try {
-		// Send a transaction to the createNewTask function
+		// Send a transaction to the createNewTask function with a gas limit
 		const validAddress = ethers.getAddress(user);
 		console.log("valid address:", validAddress);
-		const tx = await crediflexServiceManager.createNewTask(validAddress);
+		const tx = await crediflexServiceManager.createNewTask(validAddress, {
+			gasLimit: ethers.parseUnits("300000", "wei"), // Example gas limit
+		});
 
 		// Wait for the transaction to be mined
 		const receipt = await tx.wait();

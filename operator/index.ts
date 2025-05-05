@@ -126,7 +126,10 @@ const signAndRespondToTask = async (
 			{ user: task[0], taskCreatedBlock: task[1] },
 			finalCScore,
 			taskIndex,
-			signedTask
+			signedTask,
+			{
+				gasLimit: ethers.parseUnits("300000", "wei"), // Example gas limit
+			}
 		);
 		await tx.wait();
 		console.log(`Responded to task...`);

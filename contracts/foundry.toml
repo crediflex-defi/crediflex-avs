@@ -30,7 +30,7 @@ arbitrumSepolia = "https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}"
 riseSepolia = "https://testnet.riselabs.xyz"
 monadTestnet = "https://testnet-rpc.monad.xyz"
 eduChainTestnet = "https://rpc.open-campus-codex.gelato.digital"
-
+pharosDevnet = "https://devnet.dplabs-internal.com"
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
@@ -40,6 +40,7 @@ arbitrumSepolia = { key = "${ARBISCAN_API_KEY}" }
 riseSepolia = { key = "" }
 monadTestnet = { key = "" }
 eduChainTestnet = { key = "XXXX" }
+pharosDevnet = { key = "" }
 
 [fmt]
 bracket_spacing = false
